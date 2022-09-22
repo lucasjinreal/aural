@@ -1,0 +1,5 @@
+pydub
+kaldifeat
+kaldialign
+alfred-py
+sentencepiece
