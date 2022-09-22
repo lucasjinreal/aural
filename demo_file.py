@@ -28,22 +28,9 @@ torch.set_grad_enabled(False)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--bpe_model",
-        type=str,
-        help="Path to bpe.model",
-    )
-    parser.add_argument(
-        "--pretrained_model",
-        type=str,
-        help="Path to pretrained model",
-    )
-    parser.add_argument(
-        "-f",
-        "--file",
-        type=str,
-        help="Path to foo.wav",
-    )
+    parser.add_argument("--bpe_model", type=str, help="Path to bpe.model")
+    parser.add_argument("--pretrained_model", type=str, help="Path to pretrained model")
+    parser.add_argument("-f", "--file", type=str, help="Path to foo.wav")
     return parser.parse_args()
 
 

@@ -8,7 +8,11 @@ For instance, we can using aural model to listen command, just by saying, let yo
 
 We will exporting the ASR model and inference via WNNX.
 
-> Aural is build based on **k2**, and mostly reconstructed from icefall.
+> Aural is build based on **k2**, and mostly reconstructed from icefall. 
+
+Be note:
+
+> Due to it need kaldifeat and kaldialign for data process, Windows not support for now, working on it.
 
 ## Install
 
