@@ -12,7 +12,14 @@ We will exporting the ASR model and inference via WNNX.
 
 ## Install
 
-tbd
+Before runing `aural`, there are some deps need to install:
+
+```
+pip install pydub
+pip install kaldifeat
+pip install alfred-py
+pip install sentencepiece
+```
 
 
 

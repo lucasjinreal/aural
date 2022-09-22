@@ -2,7 +2,6 @@ import argparse
 from json import encoder
 import logging
 import numpy as np
-import sentencepiece as spm
 import torch
 from aural.modeling.beamsearch import FastBeamSearch, GreedySearch, ModifiedBeamSearch
 from alfred import logger as logging
@@ -165,8 +164,8 @@ def main():
     opts.frame_opts.snip_edges = False
     opts.frame_opts.samp_freq = sample_rate
     opts.mel_opts.num_bins = 80
-
     fbank = kaldifeat.Fbank(opts)
+    logging.info('FBank feat will run on CPU.')
 
     logging.info(f"Reading sound files: {sound_file}")
     wave_samples = read_sound_files(
