@@ -26,6 +26,14 @@ pip install alfred-py
 pip install sentencepiece
 ```
 
+In addition, `k2` is better install from source:
+
+```
+git clone https://github.com/k2-fsa/k2/
+cd k2
+python setup.py install
+```
+
 
 ## Demo
 

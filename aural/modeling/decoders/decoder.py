@@ -17,9 +17,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from scaling import ScaledConv1d, ScaledEmbedding
+from aural.utils.scaling import ScaledConv1d, ScaledEmbedding
 
-from icefall.utils import is_jit_tracing
+from aural.utils.util import is_jit_tracing
 
 
 class Decoder(nn.Module):

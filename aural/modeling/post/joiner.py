@@ -16,10 +16,8 @@
 
 import torch
 import torch.nn as nn
-from scaling import ScaledLinear
-
-from icefall.utils import is_jit_tracing
-
+from aural.utils.scaling import ScaledConv1d, ScaledEmbedding, ScaledLinear
+from aural.utils.util import is_jit_tracing
 
 class Joiner(nn.Module):
     def __init__(
