@@ -15,6 +15,12 @@ We will exporting the ASR model and inference via WNNX.
 tbd
 
 
+
+## References
+
+1. TTS: https://github.com/MiniXC/LightningFastSpeech2
+2. icefall: https://github.com/k2-fsa/icefall
+
 ## Copyright
 
 all rights reserverd by Lucas Jin.
