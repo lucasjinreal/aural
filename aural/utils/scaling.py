@@ -24,7 +24,7 @@ import torch.backends.cudnn.rnn as rnn
 import torch.nn as nn
 from torch import _VF, Tensor
 
-from icefall.utils import is_jit_tracing
+from .util import is_jit_tracing
 
 
 def _ntuple(n):

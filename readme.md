@@ -17,9 +17,22 @@ Before runing `aural`, there are some deps need to install:
 ```
 pip install pydub
 pip install kaldifeat
+pip install kaldialign
 pip install alfred-py
 pip install sentencepiece
 ```
+
+
+## Demo
+
+1. `demo for English librispeech data`:
+
+Download pretrained model [here](https://huggingface.co/csukuangfj/icefall-asr-librispeech-lstm-transducer-stateless2-2022-09-03/blob/main/exp/pretrained-iter-472000-avg-18.pt)
+
+
+2. `demo for Chinese wenetspeech data`:
+
+tbd
 
 
 

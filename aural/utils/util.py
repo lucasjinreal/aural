@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, TextIO, Tuple, Union
 
 import k2
-import k2.version
+# import k2.version
 import kaldialign
 import sentencepiece as spm
 import torch

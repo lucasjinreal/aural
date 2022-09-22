@@ -105,8 +105,8 @@ import k2
 import sentencepiece as spm
 import torch
 import torch.nn as nn
-from asr_datamodule import AsrDataModule
-from beam_search import (
+from aural.data.asr_datamodule import AsrDataModule
+from .beamsearch import (
     beam_search,
     fast_beam_search_nbest,
     fast_beam_search_nbest_LG,

@@ -25,7 +25,11 @@ from typing import Any, Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
-from lhotse.dataset.sampling.base import CutSampler
+try:
+    from lhotse.dataset.sampling.base import CutSampler
+except ImportError:
+    CutSampler = None
+    
 from torch import Tensor
 from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP

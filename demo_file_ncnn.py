@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import sentencepiece as spm
 import torch
-from aural.modeling.beamsearch import FastBeamSearch, GreedySearch, ModifiedBeamSearch
+from aural.modeling.post.beamsearch import FastBeamSearch, GreedySearch, ModifiedBeamSearch
 
 """
 Usage:

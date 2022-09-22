@@ -1,29 +1,18 @@
-# Copyright    2021  Xiaomi Corp.        (authors: Fangjun Kuang, Wei Kang)
-#
-# See ../../../../LICENSE for clarification regarding multiple authors
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
-from typing import Optional, Tuple
+from statistics import mode
+from typing import Tuple
 
 import k2
 import torch
 import torch.nn as nn
-from encoder_interface import EncoderInterface
-from scaling import ScaledLinear
 
-from icefall.utils import add_sos
+from ..encoders.base_encoder import EncoderInterface
+from aural.utils.scaling import ScaledLinear
+
+from aural.utils.util import add_sos
+from alfred import logger, print_shape
+from ..encoders.encoder import RNNEncoder
+from ..decoders.decoder import Decoder
+from ..post.joiner import Joiner
 
 
 class Transducer(nn.Module):
@@ -40,8 +29,6 @@ class Transducer(nn.Module):
         decoder_dim: int,
         joiner_dim: int,
         vocab_size: int,
-        decoder_giga: Optional[nn.Module] = None,
-        joiner_giga: Optional[nn.Module] = None,
     ):
         """
         Args:
@@ -59,21 +46,8 @@ class Transducer(nn.Module):
             (N, U, decoder_dim).
             Its output shape is (N, T, U, vocab_size). Note that its output
             contains unnormalized probs, i.e., not processed by log-softmax.
-          encoder_dim:
-            Output dimension of the encoder network.
-          decoder_dim:
-            Output dimension of the decoder network.
-          joiner_dim:
-            Input dimension of the joiner network.
-          vocab_size:
-            Output dimension of the joiner network.
-          decoder_giga:
-            Optional. The decoder network for the GigaSpeech dataset.
-          joiner_giga:
-            Optional. The joiner network for the GigaSpeech dataset.
         """
         super().__init__()
-
         assert isinstance(encoder, EncoderInterface), type(encoder)
         assert hasattr(decoder, "blank_id")
 
@@ -81,26 +55,27 @@ class Transducer(nn.Module):
         self.decoder = decoder
         self.joiner = joiner
 
-        self.decoder_giga = decoder_giga
-        self.joiner_giga = joiner_giga
-
-        self.simple_am_proj = ScaledLinear(
-            encoder_dim, vocab_size, initial_speed=0.5
-        )
+        self.simple_am_proj = ScaledLinear(encoder_dim, vocab_size, initial_speed=0.5)
         self.simple_lm_proj = ScaledLinear(decoder_dim, vocab_size)
 
-        if decoder_giga is not None:
-            self.simple_am_proj_giga = ScaledLinear(
-                encoder_dim, vocab_size, initial_speed=0.5
-            )
-            self.simple_lm_proj_giga = ScaledLinear(decoder_dim, vocab_size)
+    def run_encoder(self, features, states):
+      x_lens = torch.tensor([features.size(0)], dtype=torch.float32)
+      encoder_out,  _ = self.encoder(features, x_lens, states)
+      return encoder_out
+    
+    def run_decoder(self, x):
+      out = self.decoder(x)
+      return out
+
+    def run_joiner(self, x):
+      out = self.joiner(x)
+      return out
 
     def forward(
         self,
         x: torch.Tensor,
         x_lens: torch.Tensor,
         y: k2.RaggedTensor,
-        libri: bool = True,
         prune_range: int = 5,
         am_scale: float = 0.0,
         lm_scale: float = 0.0,
@@ -117,9 +92,6 @@ class Transducer(nn.Module):
           y:
             A ragged tensor with 2 axes [utt][label]. It contains labels of each
             utterance.
-          libri:
-            True to use the decoder and joiner for the LibriSpeech dataset.
-            False to use the decoder and joiner for the GigaSpeech dataset.
           prune_range:
             The prune range for rnnt loss, it means how many symbols(context)
             we are considering for each frame to compute the loss.
@@ -155,87 +127,86 @@ class Transducer(nn.Module):
         encoder_out, x_lens, _ = self.encoder(x, x_lens, warmup=warmup)
         assert torch.all(x_lens > 0)
 
-        if libri:
-            decoder = self.decoder
-            simple_lm_proj = self.simple_lm_proj
-            simple_am_proj = self.simple_am_proj
-            joiner = self.joiner
-        else:
-            decoder = self.decoder_giga
-            simple_lm_proj = self.simple_lm_proj_giga
-            simple_am_proj = self.simple_am_proj_giga
-            joiner = self.joiner_giga
-
         # Now for the decoder, i.e., the prediction network
         row_splits = y.shape.row_splits(1)
         y_lens = row_splits[1:] - row_splits[:-1]
 
-        blank_id = decoder.blank_id
+        blank_id = self.decoder.blank_id
         sos_y = add_sos(y, sos_id=blank_id)
 
         # sos_y_padded: [B, S + 1], start with SOS.
         sos_y_padded = sos_y.pad(mode="constant", padding_value=blank_id)
 
         # decoder_out: [B, S + 1, decoder_dim]
-        decoder_out = decoder(sos_y_padded)
+        decoder_out = self.decoder(sos_y_padded)
 
         # Note: y does not start with SOS
         # y_padded : [B, S]
         y_padded = y.pad(mode="constant", padding_value=0)
 
         y_padded = y_padded.to(torch.int64)
-        boundary = torch.zeros(
-            (x.size(0), 4), dtype=torch.int64, device=x.device
-        )
+        boundary = torch.zeros((x.size(0), 4), dtype=torch.int64, device=x.device)
         boundary[:, 2] = y_lens
         boundary[:, 3] = x_lens
 
-        lm = simple_lm_proj(decoder_out)
-        am = simple_am_proj(encoder_out)
+        lm = self.simple_lm_proj(decoder_out)
+        am = self.simple_am_proj(encoder_out)
 
-        with torch.cuda.amp.autocast(enabled=False):
-            simple_loss, (px_grad, py_grad) = k2.rnnt_loss_smoothed(
-                lm=lm.float(),
-                am=am.float(),
-                symbols=y_padded,
-                termination_symbol=blank_id,
-                lm_only_scale=lm_scale,
-                am_only_scale=am_scale,
+        if self.training:
+            with torch.cuda.amp.autocast(enabled=False):
+                simple_loss, (px_grad, py_grad) = k2.rnnt_loss_smoothed(
+                    lm=lm.float(),
+                    am=am.float(),
+                    symbols=y_padded,
+                    termination_symbol=blank_id,
+                    lm_only_scale=lm_scale,
+                    am_only_scale=am_scale,
+                    boundary=boundary,
+                    reduction=reduction,
+                    return_grad=True,
+                )
+
+            # ranges : [B, T, prune_range]
+            ranges = k2.get_rnnt_prune_ranges(
+                px_grad=px_grad,
+                py_grad=py_grad,
                 boundary=boundary,
-                reduction=reduction,
-                return_grad=True,
+                s_range=prune_range,
             )
 
-        # ranges : [B, T, prune_range]
-        ranges = k2.get_rnnt_prune_ranges(
-            px_grad=px_grad,
-            py_grad=py_grad,
-            boundary=boundary,
-            s_range=prune_range,
-        )
-
-        # am_pruned : [B, T, prune_range, encoder_dim]
-        # lm_pruned : [B, T, prune_range, decoder_dim]
-        am_pruned, lm_pruned = k2.do_rnnt_pruning(
-            am=joiner.encoder_proj(encoder_out),
-            lm=joiner.decoder_proj(decoder_out),
-            ranges=ranges,
-        )
-
-        # logits : [B, T, prune_range, vocab_size]
-
-        # project_input=False since we applied the decoder's input projections
-        # prior to do_rnnt_pruning (this is an optimization for speed).
-        logits = joiner(am_pruned, lm_pruned, project_input=False)
-
-        with torch.cuda.amp.autocast(enabled=False):
-            pruned_loss = k2.rnnt_loss_pruned(
-                logits=logits.float(),
-                symbols=y_padded,
+            # am_pruned : [B, T, prune_range, encoder_dim]
+            # lm_pruned : [B, T, prune_range, decoder_dim]
+            am_pruned, lm_pruned = k2.do_rnnt_pruning(
+                am=self.joiner.encoder_proj(encoder_out),
+                lm=self.joiner.decoder_proj(decoder_out),
                 ranges=ranges,
-                termination_symbol=blank_id,
-                boundary=boundary,
-                reduction=reduction,
             )
 
-        return (simple_loss, pruned_loss)
+            # logits : [B, T, prune_range, vocab_size]
+
+            # project_input=False since we applied the decoder's input projections
+            # prior to do_rnnt_pruning (this is an optimization for speed).
+            logits = self.joiner(am_pruned, lm_pruned, project_input=False)
+
+            with torch.cuda.amp.autocast(enabled=False):
+                pruned_loss = k2.rnnt_loss_pruned(
+                    logits=logits.float(),
+                    symbols=y_padded,
+                    ranges=ranges,
+                    termination_symbol=blank_id,
+                    boundary=boundary,
+                    reduction=reduction,
+                )
+            return (simple_loss, pruned_loss)
+        else:
+            outs = self.joiner(am, lm, project_input=False)
+            print_shape(outs)
+            return outs
+
+
+def build_lstm_transducer_model():
+  encoder = RNNEncoder()
+  decoder = Decoder()
+  joiner = Joiner()
+  model = Transducer(encoder, decoder, joiner)
+  return model
