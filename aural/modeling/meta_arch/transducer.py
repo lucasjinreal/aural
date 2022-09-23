@@ -59,17 +59,20 @@ class Transducer(nn.Module):
         self.simple_lm_proj = ScaledLinear(decoder_dim, vocab_size)
 
     def run_encoder(self, features, states):
-        x_lens = torch.tensor([features.size(0)], dtype=torch.long)
+        x_lens = torch.tensor([features.size(1)], dtype=torch.long)
         print('xlens: ', x_lens)
-        encoder_out, _ = self.encoder(features, x_lens, states)
-        return encoder_out
+        encoder_out, lengths, new_states = self.encoder(features, x_lens, states)
+        return encoder_out, lengths, *new_states
 
     def run_decoder(self, x):
-        out = self.decoder(x)
+        if self.training:
+          out = self.decoder(x, need_pad=True)
+        else:
+          out = self.decoder(x, need_pad=False)
         return out
 
-    def run_joiner(self, x):
-        out = self.joiner(x)
+    def run_joiner(self, encoder_out, decoder_out):
+        out = self.joiner(encoder_out, decoder_out)
         return out
 
     def forward(

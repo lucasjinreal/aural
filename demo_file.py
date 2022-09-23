@@ -49,24 +49,31 @@ def read_sound_files(
 
 
 def greedy_search(model, encoder_out: torch.Tensor):
-    assert encoder_out.ndim == 2
-    T = encoder_out.size(0)
+    print_shape(encoder_out)
+    assert encoder_out.ndim == 3
+    T = encoder_out.size(1)
     context_size = 2
     blank_id = 0  # hard-code to 0
     hyp = [blank_id] * context_size
-    decoder_input = torch.tensor(hyp, dtype=torch.int32)  # (1, context_size)
-    decoder_out = model.run_decoder(decoder_input).squeeze(0)
+    decoder_input = torch.tensor(hyp, dtype=torch.int32).unsqueeze(0)  # (1, context_size)
+    print_shape(decoder_input)
+    decoder_out = model.run_decoder(decoder_input).squeeze(1)
+    print_shape(decoder_out, encoder_out)
     #  print(decoder_out.shape)  # (512,)
     for t in range(T):
-        encoder_out_t = encoder_out[t]
+        encoder_out_t = encoder_out[:,t,:]
+        print_shape(encoder_out_t)
         joiner_out = model.run_joiner(encoder_out_t, decoder_out)
-        #  print(joiner_out.shape) # [500]
-        y = joiner_out.argmax(dim=0).tolist()
+        print(joiner_out.shape) # [500]
+        y = joiner_out.argmax(dim=1)
+        # how to do with batch?
+        print('y', y)
         if y != blank_id:
             hyp.append(y)
             decoder_input = hyp[-context_size:]
+            print(decoder_input)
             decoder_input = torch.tensor(decoder_input, dtype=torch.int32)
-            decoder_out = model.run_decoder(decoder_input).squeeze(0)
+            decoder_out = model.run_decoder(decoder_input)
     return hyp[context_size:]
 
 
@@ -106,16 +113,17 @@ def main():
 
     asr_model = build_lstm_transducer_model(sp)
     print(asr_model)
-
     asr_model.load_state_dict(
         torch.load(args.pretrained_model, map_location="cpu")["model"]
     )
+    asr_model.eval()
     logging.info("asr model loaded!")
 
     states = (
-        torch.zeros(num_encoder_layers, d_model),
+        torch.zeros(num_encoder_layers, features.size(0), d_model),
         torch.zeros(
             num_encoder_layers,
+            features.size(0),
             rnn_hidden_size,
         ),
     )

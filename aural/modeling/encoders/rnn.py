@@ -242,7 +242,7 @@ class RNN(EncoderInterface):
                     self.num_encoder_layers,
                     x.size(1),
                     self.d_model,
-                )
+                ), f"states0 shape shoud be: {self.num_encoder_layers},{x.size(1)},{self.d_model}"
                 # for cell state
                 assert states[1].shape == (
                     self.num_encoder_layers,

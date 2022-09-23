@@ -249,7 +249,6 @@ class RNN(EncoderInterface):
                     self.rnn_hidden_size,
                 )
             x, new_states = self.encoder(x, states)
-
         x = x.permute(1, 0, 2)  # (T, N, C) -> (N, T, C)
         return x, lengths, new_states
 
