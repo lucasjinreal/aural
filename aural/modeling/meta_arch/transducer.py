@@ -8,9 +8,9 @@ import torch.nn as nn
 from ..encoders.base_encoder import EncoderInterface
 from aural.utils.scaling import ScaledLinear
 
-from aural.utils.util import add_sos
+from aural.utils.util import AttributeDict, add_sos
 from alfred import logger, print_shape
-from ..encoders.encoder import RNNEncoder
+from ..encoders.rnn import RNNEncoder, RNN
 from ..decoders.decoder import Decoder
 from ..post.joiner import Joiner
 
@@ -59,17 +59,17 @@ class Transducer(nn.Module):
         self.simple_lm_proj = ScaledLinear(decoder_dim, vocab_size)
 
     def run_encoder(self, features, states):
-      x_lens = torch.tensor([features.size(0)], dtype=torch.float32)
-      encoder_out,  _ = self.encoder(features, x_lens, states)
-      return encoder_out
-    
+        x_lens = torch.tensor([features.size(0)], dtype=torch.float32)
+        encoder_out, _ = self.encoder(features, x_lens, states)
+        return encoder_out
+
     def run_decoder(self, x):
-      out = self.decoder(x)
-      return out
+        out = self.decoder(x)
+        return out
 
     def run_joiner(self, x):
-      out = self.joiner(x)
-      return out
+        out = self.joiner(x)
+        return out
 
     def forward(
         self,
@@ -204,9 +204,3 @@ class Transducer(nn.Module):
             return outs
 
 
-def build_lstm_transducer_model():
-  encoder = RNNEncoder()
-  decoder = Decoder()
-  joiner = Joiner()
-  model = Transducer(encoder, decoder, joiner)
-  return model

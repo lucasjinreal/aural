@@ -39,12 +39,24 @@ python setup.py install
 
 1. `demo for English librispeech data`:
 
-Download pretrained model [here](https://huggingface.co/csukuangfj/icefall-asr-librispeech-lstm-transducer-stateless2-2022-09-03/blob/main/exp/pretrained-iter-472000-avg-18.pt)
+Before training, we can test on the correctness of the mode, using a pretrained model which comes from icefall:
+
+```
+git clone https://huggingface.co/csukuangfj/icefall-asr-librispeech-lstm-transducer-stateless2-2022-09-03
+```
+
+this should download `token`, `bpe`, `pretrained_model` which we need enough to inference it. Be note that, `Aural` doesn't need any `icefall` code, it can run itself, compatible with `icefall` trained model.
+
+
 
 
 2. `demo for Chinese wenetspeech data`:
 
-tbd
+Download wenet pretrained model:
+
+```
+git clone https://huggingface.co/csukuangfj/icefall-asr-wenetspeech-lstm-transducer-stateless-2022-09-19
+```
 
 
 

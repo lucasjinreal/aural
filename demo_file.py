@@ -1,6 +1,5 @@
 import argparse
 from json import encoder
-import logging
 import numpy as np
 import torch
 from aural.modeling.post.beamsearch import (
@@ -9,19 +8,14 @@ from aural.modeling.post.beamsearch import (
     ModifiedBeamSearch,
 )
 from alfred import logger as logging
-
-from aural.modeling.encoders.encoder import RNNEncoder
-from aural.modeling.decoders.decoder import Decoder
-from aural.modeling.post.joiner import Joiner
-
 import argparse
-import logging
 from typing import List
 import kaldifeat
 import sentencepiece as spm
 import torch
 import torchaudio
-from aural.modeling.meta_arch.transducer import build_lstm_transducer_model
+from aural.modeling.meta_arch.lstm_transducer import build_lstm_transducer_model
+from alfred import print_shape
 
 torch.set_grad_enabled(False)
 
@@ -29,8 +23,14 @@ torch.set_grad_enabled(False)
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bpe_model", type=str, help="Path to bpe.model")
-    parser.add_argument("--pretrained_model", type=str, help="Path to pretrained model")
-    parser.add_argument("-f", "--file", type=str, help="Path to foo.wav")
+    parser.add_argument("-p", "--pretrained_model", type=str, help="pretrained model")
+    parser.add_argument(
+        "-f",
+        "--file",
+        type=str,
+        default="data/test_data/libri_reaer.wav",
+        help="foo.wav",
+    )
     return parser.parse_args()
 
 
@@ -75,9 +75,9 @@ def main():
     logging.info(vars(args))
 
     sp = spm.SentencePieceProcessor()
-    sp.load(args.bpe_model_filename)
+    sp.load(args.bpe_model)
 
-    sound_file = args.sound_filename
+    sound_file = args.file
     sample_rate = 16000
 
     logging.info("Constructing Fbank computer")
@@ -103,10 +103,12 @@ def main():
     d_model = 512
     rnn_hidden_size = 1024
 
-    asr_model = build_lstm_transducer_model()
+    asr_model = build_lstm_transducer_model(sp)
     print(asr_model)
 
-    asr_model.load_state_dict(torch.load(args.pretrained_model, map_location="cpu"))
+    asr_model.load_state_dict(
+        torch.load(args.pretrained_model, map_location="cpu")["model"]
+    )
     logging.info("asr model loaded!")
 
     states = (
@@ -117,6 +119,7 @@ def main():
         ),
     )
 
+    print_shape(features)
     encoder_out, encoder_out_lens, hx, cx = asr_model.run_encoder(features, states)
     hyp = greedy_search(asr_model, encoder_out)
     logging.info(sound_file)
