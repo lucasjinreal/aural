@@ -3,7 +3,7 @@ import torch
 
 
 def greedy_search_single_batch(
-    model, encoder_out: torch.Tensor, max_sym_per_frame: int=5
+    model, encoder_out: torch.Tensor, max_sym_per_frame: int=1
 ) -> List[int]:
     """Greedy search for a single utterance.
     Args:
