@@ -82,6 +82,9 @@ def export_encoder_model_jit_trace(
     traced_model.save(encoder_filename)
     logging.info(f"Saved to {encoder_filename}")
 
+    o_f = str(encoder_filename).split('.')[0] + '.onnx'
+    torch.onnx.export(encoder_model, (x, x_lens, states), o_f)
+    logging.info(f"Saved ONNX to {o_f}")
 
 def export_decoder_model_jit_trace(
     decoder_model: nn.Module,
