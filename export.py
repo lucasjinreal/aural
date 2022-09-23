@@ -7,13 +7,6 @@ import torch
 import torch.nn as nn
 from aural.utils.scaling_converter import convert_scaled_to_non_scaled
 from train import add_model_arguments, get_params, get_transducer_model
-
-from aural.utils.checkpoint import (
-    average_checkpoints,
-    average_checkpoints_with_averaged_model,
-    find_checkpoints,
-    load_checkpoint,
-)
 from aural.utils.util import str2bool
 from alfred import logger as logging
 
@@ -83,7 +76,7 @@ def export_encoder_model_jit_trace(
     logging.info(f"Saved to {encoder_filename}")
 
     o_f = str(encoder_filename).split('.')[0] + '.onnx'
-    torch.onnx.export(encoder_model, (x, x_lens, states), o_f)
+    # torch.onnx.export(encoder_model, (x, x_lens, states), o_f)
     logging.info(f"Saved ONNX to {o_f}")
 
 def export_decoder_model_jit_trace(

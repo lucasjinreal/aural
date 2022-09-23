@@ -225,7 +225,7 @@ class RNN(EncoderInterface):
             lengths = torch.floor((lengths1 - 1) / 2)
             lengths = lengths.to(x_lens)
 
-        print(x.shape, lengths)
+        # print(x.shape, lengths)
         if not torch.jit.is_tracing():
             assert x.size(0) == lengths.max().item()
 
@@ -305,6 +305,7 @@ class RNNEncoderLayer(nn.Module):
             input_size=d_model,
             hidden_size=rnn_hidden_size,
             proj_size=d_model if rnn_hidden_size > d_model else 0,
+            # proj_size=0,
             num_layers=1,
             dropout=0.0,
         )

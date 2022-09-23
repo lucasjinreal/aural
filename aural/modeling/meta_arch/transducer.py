@@ -60,7 +60,7 @@ class Transducer(nn.Module):
 
     def run_encoder(self, features, states):
         x_lens = torch.tensor([features.size(1)], dtype=torch.long)
-        print('xlens: ', x_lens)
+        # print('xlens: ', x_lens)
         encoder_out, lengths, new_states = self.encoder(features, x_lens, states)
         return encoder_out, lengths, *new_states
 
@@ -204,7 +204,7 @@ class Transducer(nn.Module):
             return (simple_loss, pruned_loss)
         else:
             outs = self.joiner(am, lm, project_input=False)
-            print_shape(outs)
+            # print_shape(outs)
             return outs
 
 
