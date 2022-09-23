@@ -225,6 +225,7 @@ class RNN(EncoderInterface):
             lengths = torch.floor((lengths1 - 1) / 2)
             lengths = lengths.to(x_lens)
 
+        print(x.shape, lengths)
         if not torch.jit.is_tracing():
             assert x.size(0) == lengths.max().item()
 

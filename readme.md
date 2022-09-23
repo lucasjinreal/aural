@@ -43,6 +43,7 @@ Before training, we can test on the correctness of the mode, using a pretrained 
 
 ```
 git clone https://huggingface.co/csukuangfj/icefall-asr-librispeech-lstm-transducer-stateless2-2022-09-03
+git clone https://huggingface.co/Zengwei/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/
 ```
 
 this should download `token`, `bpe`, `pretrained_model` which we need enough to inference it. Be note that, `Aural` doesn't need any `icefall` code, it can run itself, compatible with `icefall` trained model.

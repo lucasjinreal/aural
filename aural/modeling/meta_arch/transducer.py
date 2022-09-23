@@ -59,7 +59,8 @@ class Transducer(nn.Module):
         self.simple_lm_proj = ScaledLinear(decoder_dim, vocab_size)
 
     def run_encoder(self, features, states):
-        x_lens = torch.tensor([features.size(0)], dtype=torch.float32)
+        x_lens = torch.tensor([features.size(0)], dtype=torch.long)
+        print('xlens: ', x_lens)
         encoder_out, _ = self.encoder(features, x_lens, states)
         return encoder_out
 

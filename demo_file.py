@@ -98,6 +98,7 @@ def main():
 
     logging.info("Decoding started")
     features = fbank(wave_samples)
+    features = features.unsqueeze(0)
 
     num_encoder_layers = 12
     d_model = 512
