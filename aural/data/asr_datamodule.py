@@ -19,21 +19,22 @@ import argparse
 import logging
 from pathlib import Path
 from typing import Optional
-
-from lhotse import CutSet, Fbank, FbankConfig
-from lhotse.dataset import (
-    CutMix,
-    DynamicBucketingSampler,
-    K2SpeechRecognitionDataset,
-    SpecAugment,
-)
-from lhotse.dataset.input_strategies import (
-    OnTheFlyFeatures,
-    PrecomputedFeatures,
-)
 from torch.utils.data import DataLoader
-
-from icefall.utils import str2bool
+try:
+    from lhotse import CutSet, Fbank, FbankConfig
+    from lhotse.dataset import (
+        CutMix,
+        DynamicBucketingSampler,
+        K2SpeechRecognitionDataset,
+        SpecAugment,
+    )
+    from lhotse.dataset.input_strategies import (
+        OnTheFlyFeatures,
+        PrecomputedFeatures,
+    )
+except ImportError:
+    pass
+from aural.utils.util import str2bool
 
 
 class AsrDataModule:
@@ -149,9 +150,9 @@ class AsrDataModule:
 
     def train_dataloaders(
         self,
-        cuts_train: CutSet,
+        cuts_train,
         on_the_fly_feats: bool,
-        cuts_musan: Optional[CutSet] = None,
+        cuts_musan = None,
     ) -> DataLoader:
         """
         Args:
@@ -243,7 +244,7 @@ class AsrDataModule:
         )
         return train_dl
 
-    def valid_dataloaders(self, cuts_valid: CutSet) -> DataLoader:
+    def valid_dataloaders(self, cuts_valid) -> DataLoader:
         transforms = []
 
         logging.info("About to create dev dataset")
@@ -278,7 +279,7 @@ class AsrDataModule:
 
         return valid_dl
 
-    def test_dataloaders(self, cuts: CutSet) -> DataLoader:
+    def test_dataloaders(self, cuts) -> DataLoader:
         logging.debug("About to create test dataset")
         test = K2SpeechRecognitionDataset(
             input_strategy=OnTheFlyFeatures(Fbank(FbankConfig(num_mel_bins=80)))

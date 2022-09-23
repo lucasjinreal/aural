@@ -18,8 +18,10 @@
 import logging
 from pathlib import Path
 
-from lhotse import CutSet, load_manifest_lazy
-
+try:
+    from lhotse import CutSet, load_manifest_lazy
+except ImportError:
+    pass
 
 class LibriSpeech:
     def __init__(self, manifest_dir: str):

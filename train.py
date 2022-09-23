@@ -1,51 +1,3 @@
-#!/usr/bin/env python3
-# Copyright    2021  Xiaomi Corp.        (authors: Fangjun Kuang,
-#                                                  Wei Kang,
-#                                                  Mingshuang Luo,)
-#                                                  Zengwei Yao)
-#
-# See ../../../../LICENSE for clarification regarding multiple authors
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
-Usage:
-
-export CUDA_VISIBLE_DEVICES="0,1,2,3"
-
-cd egs/librispeech/ASR/
-./prepare.sh
-./prepare_giga_speech.sh
-
-./lstm_transducer_stateless2/train.py \
-  --world-size 4 \
-  --num-epochs 30 \
-  --start-epoch 1 \
-  --exp-dir lstm_transducer_stateless2/exp \
-  --full-libri 1 \
-  --max-duration 300
-
-# For mix precision training:
-
-./lstm_transducer_stateless2/train.py \
-  --world-size 4 \
-  --num-epochs 30 \
-  --start-epoch 1 \
-  --use-fp16 1 \
-  --exp-dir lstm_transducer_stateless2/exp \
-  --full-libri 1 \
-  --max-duration 550
-"""
-
 import argparse
 import copy
 import logging
@@ -56,38 +8,30 @@ from shutil import copyfile
 from typing import Any, Dict, Optional, Tuple, Union
 
 import k2
-import optim
+from aural.optim import eve as optim
+from aural.optim.eve import Eden, Eve
 import sentencepiece as spm
 import torch
 import torch.multiprocessing as mp
 import torch.nn as nn
-from asr_datamodule import AsrDataModule
-from decoder import Decoder
-from gigaspeech import GigaSpeech
-from joiner import Joiner
-from lhotse import CutSet, load_manifest
-from lhotse.cut import Cut
-from lhotse.dataset.sampling.base import CutSampler
-from lhotse.utils import fix_random_seed
-from librispeech import LibriSpeech
-from lstm import RNN
-from model import Transducer
-from optim import Eden, Eve
+from aural.data.asr_datamodule import AsrDataModule
+
+from aural.modeling.decoders.decoder import Decoder
+from aural.modeling.encoders.rnn import RNN
+from aural.modeling.meta_arch.transducer import Transducer
+from aural.modeling.post.joiner import Joiner
 from torch import Tensor
 from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 
-from icefall import diagnostics
-from icefall.checkpoint import load_checkpoint, remove_checkpoints
-from icefall.checkpoint import save_checkpoint as save_checkpoint_impl
-from icefall.checkpoint import (
+from aural.utils.checkpoint import load_checkpoint, remove_checkpoints
+from aural.utils.checkpoint import save_checkpoint as save_checkpoint_impl
+from aural.utils.checkpoint import (
     save_checkpoint_with_global_batch_idx,
     update_averaged_model,
 )
-from icefall.dist import cleanup_dist, setup_dist
-from icefall.env import get_env_info
-from icefall.utils import (
+from aural.utils.util import (
     AttributeDict,
     MetricsTracker,
     display_and_save_batch,
@@ -95,9 +39,23 @@ from icefall.utils import (
     str2bool,
 )
 
-LRSchedulerType = Union[
-    torch.optim.lr_scheduler._LRScheduler, optim.LRScheduler
-]
+try:
+    from gigaspeech import GigaSpeech
+    from lhotse import CutSet, load_manifest
+    from lhotse.cut import Cut
+    from lhotse.dataset.sampling.base import CutSampler
+    from lhotse.utils import fix_random_seed
+    from librispeech import LibriSpeech
+except ImportError:
+    CutSampler = None
+    Cut = None
+    CutSet = None
+
+from aural.utils.dist import cleanup_dist, setup_dist
+from aural.utils.env import get_env_info
+from aural.utils import diagnostics
+
+LRSchedulerType = Union[torch.optim.lr_scheduler._LRScheduler, optim.LRScheduler]
 
 
 def add_model_arguments(parser: argparse.ArgumentParser):
@@ -163,8 +121,7 @@ def get_parser():
         "--full-libri",
         type=str2bool,
         default=True,
-        help="When enabled, use 960h LibriSpeech. "
-        "Otherwise, use 100h subset.",
+        help="When enabled, use 960h LibriSpeech. " "Otherwise, use 100h subset.",
     )
 
     parser.add_argument(
@@ -238,8 +195,7 @@ def get_parser():
         "--context-size",
         type=int,
         default=2,
-        help="The context size in the decoder. 1 means bigram; "
-        "2 means tri-gram",
+        help="The context size in the decoder. 1 means bigram; " "2 means tri-gram",
     )
 
     parser.add_argument(
@@ -262,8 +218,7 @@ def get_parser():
         "--am-scale",
         type=float,
         default=0.0,
-        help="The scale to smooth the loss with am (output of encoder network)"
-        "part.",
+        help="The scale to smooth the loss with am (output of encoder network)" "part.",
     )
 
     parser.add_argument(
@@ -472,8 +427,8 @@ def get_transducer_model(
         encoder=encoder,
         decoder=decoder,
         joiner=joiner,
-        decoder_giga=decoder_giga,
-        joiner_giga=joiner_giga,
+        # decoder_giga=decoder_giga,
+        # joiner_giga=joiner_giga,
         encoder_dim=params.encoder_dim,
         decoder_dim=params.decoder_dim,
         joiner_dim=params.joiner_dim,
@@ -635,11 +590,7 @@ def compute_loss(
      warmup: a floating point value which increases throughout training;
         values >= 1.0 are fully warmed up and have all modules present.
     """
-    device = (
-        model.device
-        if isinstance(model, DDP)
-        else next(model.parameters()).device
-    )
+    device = model.device if isinstance(model, DDP) else next(model.parameters()).device
     feature = batch["inputs"]
     # at entry, feature is (N, T, C)
     assert feature.ndim == 3
@@ -681,9 +632,7 @@ def compute_loss(
 
             # If either all simple_loss or pruned_loss is inf or nan,
             # we stop the training process by raising an exception
-            if torch.all(~simple_loss_is_finite) or torch.all(
-                ~pruned_loss_is_finite
-            ):
+            if torch.all(~simple_loss_is_finite) or torch.all(~pruned_loss_is_finite):
                 raise ValueError(
                     "There are too many utterances in this batch "
                     "leading to inf or nan losses."
@@ -696,14 +645,9 @@ def compute_loss(
         # overwhelming the simple_loss and causing it to diverge,
         # in case it had not fully learned the alignment yet.
         pruned_loss_scale = (
-            0.0
-            if warmup < 1.0
-            else (0.1 if warmup > 1.0 and warmup < 2.0 else 1.0)
+            0.0 if warmup < 1.0 else (0.1 if warmup > 1.0 and warmup < 2.0 else 1.0)
         )
-        loss = (
-            params.simple_loss_scale * simple_loss
-            + pruned_loss_scale * pruned_loss
-        )
+        loss = params.simple_loss_scale * simple_loss + pruned_loss_scale * pruned_loss
 
     assert loss.requires_grad == is_training
 
@@ -714,9 +658,7 @@ def compute_loss(
         # (1) The acutal subsampling factor is ((lens - 1) // 2 - 1) // 2
         # (2) If some utterances in the batch lead to inf/nan loss, they
         #     are filtered out.
-        info["frames"] = (
-            (feature_lens // params.subsampling_factor).sum().item()
-        )
+        info["frames"] = (feature_lens // params.subsampling_factor).sum().item()
 
     # `utt_duration` and `utt_pad_proportion` would be normalized by `utterances`  # noqa
     info["utterances"] = feature.size(0)
@@ -947,9 +889,7 @@ def train_one_epoch(
                     f"train/current_{prefix}_",
                     params.batch_idx_train,
                 )
-                tot_loss.write_summary(
-                    tb_writer, "train/tot_", params.batch_idx_train
-                )
+                tot_loss.write_summary(tb_writer, "train/tot_", params.batch_idx_train)
                 libri_tot_loss.write_summary(
                     tb_writer, "train/libri_tot_", params.batch_idx_train
                 )
@@ -1114,9 +1054,7 @@ def run(rank, world_size, args):
     train_giga_cuts = train_giga_cuts.repeat(times=None)
 
     if args.enable_musan:
-        cuts_musan = load_manifest(
-            Path(args.manifest_dir) / "musan_cuts.jsonl.gz"
-        )
+        cuts_musan = load_manifest(Path(args.manifest_dir) / "musan_cuts.jsonl.gz")
     else:
         cuts_musan = None
 

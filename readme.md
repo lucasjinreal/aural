@@ -64,6 +64,14 @@ git clone https://huggingface.co/csukuangfj/icefall-asr-wenetspeech-lstm-transdu
 ```
 
 
+## Export JIT ONNX
+
+To export the model for JIT for onnx:
+
+```
+python export.py --pretrained_model weights/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/exp/pretrained.pt --bpe_model weights/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/data/lang_bpe_500/bpe.model
+```
+
 
 ## References
 

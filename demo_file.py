@@ -17,7 +17,10 @@ import torch
 import torchaudio
 from aural.modeling.meta_arch.lstm_transducer import build_lstm_transducer_model
 from alfred import print_shape
-from aural.modeling.post.geedysearch import greedy_search_batch, greedy_search_single_batch
+from aural.modeling.post.geedysearch import (
+    greedy_search_batch,
+    greedy_search_single_batch,
+)
 
 torch.set_grad_enabled(False)
 
@@ -48,6 +51,30 @@ def read_sound_files(
         # We use only the first channel
         ans.append(wave[0])
     return ans
+
+
+def greedy_search_simple(model, encoder_out: torch.Tensor):
+    assert encoder_out.ndim == 2
+    T = encoder_out.size(0)
+
+    context_size = 2
+    blank_id = 0  # hard-code to 0
+    hyp = [blank_id] * context_size
+    decoder_input = torch.tensor(hyp, dtype=torch.int32)  # (1, context_size)
+
+    decoder_out = model.run_decoder(decoder_input).squeeze(0)
+    #  print(decoder_out.shape)  # (512,)
+    for t in range(T):
+        encoder_out_t = encoder_out[t]
+        joiner_out = model.run_joiner(encoder_out_t, decoder_out)
+        #  print(joiner_out.shape) # [500]
+        y = joiner_out.argmax(dim=0).tolist()
+        if y != blank_id:
+            hyp.append(y)
+            decoder_input = hyp[-context_size:]
+            decoder_input = torch.tensor(decoder_input, dtype=torch.int32)
+            decoder_out = model.run_decoder(decoder_input).squeeze(0)
+    return hyp[context_size:]
 
 
 def main():
