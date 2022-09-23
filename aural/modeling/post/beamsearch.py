@@ -22,6 +22,7 @@ import k2
 import sentencepiece as spm
 import torch
 from aural.modeling.meta_arch.transducer import Transducer
+from aural.modeling.post.decode import one_best_decoding
 
 # from .decode import Nbest, one_best_decoding
 from aural.utils.util import add_eos, add_sos, get_texts

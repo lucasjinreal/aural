@@ -72,7 +72,7 @@ class Transducer(nn.Module):
         return out
 
     def run_joiner(self, encoder_out, decoder_out):
-        out = self.joiner(encoder_out, decoder_out)
+        out = self.joiner(encoder_out, decoder_out, project_input=True)
         return out
 
     def forward(

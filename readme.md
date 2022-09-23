@@ -48,7 +48,11 @@ git clone https://huggingface.co/Zengwei/icefall-asr-librispeech-lstm-transducer
 
 this should download `token`, `bpe`, `pretrained_model` which we need enough to inference it. Be note that, `Aural` doesn't need any `icefall` code, it can run itself, compatible with `icefall` trained model.
 
+Move your cloned file to `weights`, then run:
 
+```
+python demo_file.py --bpe_model weights/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/data/lang_bpe_500/bpe.model --pretrained_model weights/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/exp/pretrained.pt
+```
 
 
 2. `demo for Chinese wenetspeech data`:
