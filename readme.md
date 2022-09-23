@@ -1,10 +1,10 @@
 # Aural
 
+![](https://s1.ax1x.com/2022/09/23/xkR3CR.png)
+
 **Aural** is a project which focusing on training a ASR model. Then using the output model to driven more applications which need ASR.
 
 For instance, we can using aural model to listen command, just by saying, let your AI can understand what you saying.
-
-> still WIP.
 
 We will exporting the ASR model and inference via WNNX.
 
@@ -13,6 +13,8 @@ We will exporting the ASR model and inference via WNNX.
 Be note:
 
 > Due to it need kaldifeat and kaldialign for data process, Windows not support for now, working on it.
+
+Aural is **much more simpler than icefall or wenet**.
 
 ## Install
 
