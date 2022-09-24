@@ -1,7 +1,5 @@
 .vscode/
-
 vendor/
-data/
 weights/
 .DS_Store
 __pycache__/
