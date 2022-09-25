@@ -75,6 +75,29 @@ python export.py --pretrained_model weights/icefall-asr-librispeech-lstm-transdu
 ```
 
 
+## Inference using NCNN
+
+Run:
+
+```
+python demo_file_ncnn.py \ 
+--bpe-model-filename ./weights/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/data/lang_bpe_500/bpe.model \
+   --encoder-param-filename ./weights/encoder_jit_trace-pnnx.ncnn.param \
+   --encoder-bin-filename ./weights/encoder_jit_trace-pnnx.ncnn.bin \
+   --decoder-param-filename ./weights/decoder_jit_trace-pnnx.ncnn.param \
+   --decoder-bin-filename ./weights/decoder_jit_trace-pnnx.ncnn.bin \
+   --joiner-param-filename ./weights/joiner_jit_trace-pnnx.ncnn.param \
+   --joiner-bin-filename ./weights/joiner_jit_trace-pnnx.ncnn.bin \
+   ./data/test_data/1221-135766-0001.wav
+```
+
+You should using customized ncnn branch with some modification.
+
+```
+https://github.com/jinfagang/ncnn/tree/merge_xx
+```
+
+
 ## References
 
 1. TTS: https://github.com/MiniXC/LightningFastSpeech2
