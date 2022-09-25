@@ -1,11 +1,12 @@
 import argparse
 import logging
 from pathlib import Path
-
+import os
 import onnx
 import sentencepiece as spm
 import torch
 import torch.nn as nn
+from aural.utils.lexicon import Lexicon
 from aural.utils.scaling_converter import convert_scaled_to_non_scaled
 
 # from train import add_model_arguments, get_params, get_transducer_model
@@ -20,7 +21,7 @@ from aural.utils.checkpoint import (
     load_checkpoint,
 )
 from aural.utils.util import str2bool
-
+from alfred import logger as logging
 
 """
 the LSTM model can not convert to onnx, this only for conformer or emformer
@@ -32,50 +33,13 @@ def get_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
+    parser.add_argument("-p", "--pretrained_model", type=str, help="pretrained model")
     parser.add_argument(
-        "--epoch",
-        type=int,
-        default=28,
-        help="""It specifies the checkpoint to use for averaging.
-        Note: Epoch counts from 0.
-        You can specify --avg to use more checkpoints for model averaging.""",
-    )
-
-    parser.add_argument(
-        "--iter",
-        type=int,
-        default=0,
-        help="""If positive, --epoch is ignored and it
-        will use the checkpoint exp_dir/checkpoint-iter.pt.
-        You can specify --avg to use more checkpoints for model averaging.
-        """,
-    )
-
-    parser.add_argument(
-        "--avg",
-        type=int,
-        default=15,
-        help="Number of checkpoints to average. Automatically select "
-        "consecutive checkpoints before the checkpoint specified by "
-        "'--epoch' and '--iter'",
-    )
-
-    parser.add_argument(
-        "--exp-dir",
-        type=str,
-        default="pruned_transducer_stateless3/exp",
-        help="""It specifies the directory where all training related
-        files, e.g., checkpoints, log, etc, are saved
-        """,
-    )
-
-    parser.add_argument(
-        "--bpe-model",
+        "--bpe_model",
         type=str,
         default="data/lang_bpe_500/bpe.model",
         help="Path to the BPE model",
     )
-
     parser.add_argument(
         "--jit",
         type=str2bool,
@@ -104,7 +68,7 @@ def get_parser():
     parser.add_argument(
         "--onnx",
         type=str2bool,
-        default=False,
+        default=True,
         help="""If True, --jit is ignored and it exports the model
         to onnx format. Three files will be generated:
             - encoder.onnx
@@ -397,10 +361,13 @@ def export_all_in_one_onnx(
 @torch.no_grad()
 def main():
     args = get_parser().parse_args()
-    args.exp_dir = Path(args.exp_dir)
 
     params = get_default_params()
+    params.update({"exp_dir": "weights/onnx"})
+    params.exp_dir = Path(params.exp_dir)
     params.update(vars(args))
+    
+    os.makedirs(params.exp_dir, exist_ok=True)
 
     device = torch.device("cpu")
     if torch.cuda.is_available():
@@ -408,12 +375,21 @@ def main():
 
     logging.info(f"device: {device}")
 
-    sp = spm.SentencePieceProcessor()
-    sp.load(params.bpe_model)
+    if "bpe" in args.bpe_model:
+        sp = spm.SentencePieceProcessor()
+        sp.load(args.bpe_model)
+         # <blk> is defined in local/train_bpe_model.py
+        params.blank_id = sp.piece_to_id("<blk>")
+        params.vocab_size = sp.get_piece_size()
+    else:
+        lexions = Lexicon(args.bpe_model)
+        # vc  = max(token_table) + 1
+         # <blk> is defined in local/train_bpe_model.py
+        params.blank_id = lexions.token_table["<blk>"]
+        params.vocab_size = max(lexions.tokens) + 1
+        logging.info('Reading Lexions...')
 
-    # <blk> is defined in local/train_bpe_model.py
-    params.blank_id = sp.piece_to_id("<blk>")
-    params.vocab_size = sp.get_piece_size()
+        sp = lexions
 
     if params.streaming_model:
         assert params.causal_convolution
@@ -425,38 +401,10 @@ def main():
     model = build_conformer_transducer_model(sp, params)
     model.to(device)
 
-    if params.iter > 0:
-        filenames = find_checkpoints(params.exp_dir, iteration=-params.iter)[
-            : params.avg
-        ]
-        if len(filenames) == 0:
-            raise ValueError(
-                f"No checkpoints found for" f" --iter {params.iter}, --avg {params.avg}"
-            )
-        elif len(filenames) < params.avg:
-            raise ValueError(
-                f"Not enough checkpoints ({len(filenames)}) found for"
-                f" --iter {params.iter}, --avg {params.avg}"
-            )
-        logging.info(f"averaging {filenames}")
-        model.to(device)
-        model.load_state_dict(
-            average_checkpoints(filenames, device=device), strict=False
-        )
-    elif params.avg == 1:
-        load_checkpoint(f"{params.exp_dir}/epoch-{params.epoch}.pt", model)
-    else:
-        start = params.epoch - params.avg + 1
-        filenames = []
-        for i in range(start, params.epoch + 1):
-            if start >= 0:
-                filenames.append(f"{params.exp_dir}/epoch-{i}.pt")
-        logging.info(f"averaging {filenames}")
-        model.to(device)
-        model.load_state_dict(
-            average_checkpoints(filenames, device=device), strict=False
-        )
-
+    model.load_state_dict(
+        torch.load(args.pretrained_model, "cpu"),
+        strict=False,
+    )
     model.to("cpu")
     model.eval()
 
@@ -527,17 +475,7 @@ def main():
 
         joiner_filename = params.exp_dir / "joiner_jit_trace.pt"
         export_joiner_model_jit_trace(model.joiner, joiner_filename)
-    else:
-        logging.info("Not using torchscript")
-        # Save it using a format so that it can be loaded
-        # by :func:`load_checkpoint`
-        filename = params.exp_dir / "pretrained.pt"
-        torch.save({"model": model.state_dict()}, str(filename))
-        logging.info(f"Saved to {filename}")
 
 
 if __name__ == "__main__":
-    formatter = "%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s"
-
-    logging.basicConfig(format=formatter, level=logging.INFO)
     main()

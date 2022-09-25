@@ -96,12 +96,24 @@ You will get output:
 
 ## Export JIT ONNX
 
+1. `export to jit pnnx`
+
+
 To export the model for JIT for onnx:
 
 ```
 python export.py --pretrained_model weights/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/exp/pretrained.pt --bpe_model weights/icefall-asr-librispeech-lstm-transducer-stateless-2022-08-18/data/lang_bpe_500/bpe.model
 ```
 
+2. `export to onnx`
+
+Currently only tested Chinese version:
+
+```
+python export_onnx.py --bpe_model weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/data/lang_char/ --pretrained_model weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/exp/pretrained_epoch_10_avg_2.pt
+```
+
+You will get 3 models inside `weights/onnx`
 
 ## Inference using NCNN
 
