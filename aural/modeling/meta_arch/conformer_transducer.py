@@ -6,6 +6,8 @@ from ..encoders.conformer import Conformer
 from ..decoders.decoder import Decoder
 from ..post.joiner import Joiner
 from aural.utils.util import str2bool
+from aural.utils.lexicon import Lexicon
+from alfred import logger
 
 
 def add_model_arguments(parser: argparse.ArgumentParser):
@@ -66,13 +68,23 @@ def get_default_params():
             # parameters for Noam
             "model_warm_step": 3000,  # arg given to model, not for lrate
             # "env_info": get_env_info(),
+            "dynamic_chunk_training": False,
+            "short_chunk_size": 25,
+            "num_left_chunks": 4,
+            "causal_convolution": False,
+            "context_size": 2,
         }
     )
 
 
 def build_conformer_transducer_model(sp, params):
-    params.blank_id = sp.piece_to_id("<blk>")
-    params.vocab_size = sp.get_piece_size()
+    if isinstance(sp, Lexicon):
+        params.blank_id = sp.token_table["<blk>"]
+        params.vocab_size = max(sp.tokens) + 1
+        logger.info(f"vocab size: {params.vocab_size}")
+    else:
+        params.blank_id = sp.piece_to_id("<blk>")
+        params.vocab_size = sp.get_piece_size()
 
     encoder = Conformer(
         num_features=params.feature_dim,
@@ -86,7 +98,6 @@ def build_conformer_transducer_model(sp, params):
         num_left_chunks=params.num_left_chunks,
         causal=params.causal_convolution,
     )
-
     decoder = Decoder(
         vocab_size=params.vocab_size,
         decoder_dim=params.decoder_dim,

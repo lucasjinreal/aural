@@ -1,5 +1,10 @@
+import math
 from typing import List
 import torch
+
+from aural.modeling.post.beamsearch import greedy_search
+from torch.nn.utils.rnn import pad_sequence
+from alfred import device
 
 
 def greedy_search_single_batch(
@@ -149,3 +154,60 @@ def greedy_search_batch(
     for i in range(N):
         ans.append(sorted_ans[unsorted_indices[i]])
     return ans
+
+LOG_EPS = math.log(1e-10)
+
+
+class GreedySearchOffline:
+    def __init__(self):
+        pass
+
+    @torch.no_grad()
+    def process(
+        self,
+        model,
+        features: List[torch.Tensor],
+    ) -> List[List[int]]:
+        """
+        Args:
+          model:
+            RNN-T model decoder model
+          features:
+            A list of 2-D tensors. Each entry is of shape
+            (num_frames, feature_dim).
+        Returns:
+          Return a list-of-list containing the decoding token IDs.
+        """
+        features_length = torch.tensor(
+            [f.size(0) for f in features],
+            dtype=torch.int64,
+        )
+        features = pad_sequence(
+            features,
+            batch_first=True,
+            padding_value=LOG_EPS,
+        )
+
+        features = features.to(device)
+        features_length = features_length.to(device)
+
+        if device.type == "cpu":
+            encoder_out, encoder_out_length = model.encoder(
+               features,
+                features_length,
+            )
+        elif device.type == "cuda":
+            with torch.cuda.amp.autocast():
+                encoder_out, encoder_out_length = model.encoder(
+                    features,
+                    features_length,
+                )
+        else:
+            raise NotImplementedError("Device not supported")
+
+        hyp_tokens = greedy_search_batch(
+            model=model,
+            encoder_out=encoder_out,
+            encoder_out_lens=encoder_out_length.cpu(),
+        )
+        return hyp_tokens
