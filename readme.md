@@ -62,7 +62,27 @@ python demo_file.py --bpe_model weights/icefall-asr-librispeech-lstm-transducer-
 Download wenet pretrained model:
 
 ```
-git clone https://huggingface.co/csukuangfj/icefall-asr-wenetspeech-lstm-transducer-stateless-2022-09-19
+git clone https://huggingface.co/luomingshuang/icefall_asr_wenetspeech_pruned_transducer_stateless2
+git lfs pull
+```
+
+Then, using command line to inference on a wav file:
+
+```
+python demo_file.py --bpe_model weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/data/lang_char/ --pretrained_model weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/exp/pretrained_epoch_10_avg_2.pt -f data/test_data/16k16bit.wav
+```
+
+You will get output:
+
+```
+21:26:18 09.25 INFO demo_file.py:119]: Decoding started
+21:26:18 09.25 INFO demo_file.py:130]: using the Conformer model.
+21:26:18 09.25 INFO conformer_tr...py:84]: vocab size: 5537
+21:26:19 09.25 INFO demo_file.py:138]: asr model loaded!
+[features]:  torch.Size([1, 703, 80]) cpu torch.float32
+21:26:19 09.25 INFO demo_file.py:165]: runing on conformer..
+21:26:19 09.25 INFO demo_file.py:168]: /Users/jintian/Downloads/16k16bit.wav
+21:26:19 09.25 INFO demo_file.py:175]: 华为致力于把数字世界带入每个人每个家庭每个组织构建万物互联的智能世界
 ```
 
 

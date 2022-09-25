@@ -163,13 +163,15 @@ def main():
         logging.info(res)
     else:
         logging.info("runing on conformer..")
-        beam_search = GreedySearchOffline()
-        tokens = beam_search.process(asr_model, features)
+        encoder_out, encoder_out_lens = asr_model.run_encoder(features)
+        tokens = greedy_search_single_batch(asr_model, encoder_out, encoder_out_lens)
+        logging.info(sound_file)
+
         if "bpe" in args.bpe_model:
             res = sp.decode(tokens)
         else:
-            res = [[lexions.token_table[i] for i in hyp] for hyp in tokens]
-            res = ["".join(r) for r in res]
+            res = [lexions.token_table[i] for i in tokens]
+            res = "".join(res) 
         logging.info(res)
 
 

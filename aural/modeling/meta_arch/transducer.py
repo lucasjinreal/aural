@@ -60,7 +60,7 @@ class Transducer(nn.Module):
         self.simple_am_proj = ScaledLinear(encoder_dim, vocab_size, initial_speed=0.5)
         self.simple_lm_proj = ScaledLinear(decoder_dim, vocab_size)
 
-    def run_encoder(self, features, states):
+    def run_encoder(self, features, states=None):
         x_lens = torch.tensor([features.size(1)], dtype=torch.long)
         # print('xlens: ', x_lens)
         if isinstance(self.encoder, Conformer):
