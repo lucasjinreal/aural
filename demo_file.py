@@ -21,6 +21,7 @@ from aural.modeling.post.geedysearch import (
     greedy_search_batch,
     greedy_search_single_batch,
 )
+from aural.modeling.meta_arch.conformer_transducer import build_conformer_transducer_model, get_default_params
 
 torch.set_grad_enabled(False)
 
@@ -111,7 +112,12 @@ def main():
     d_model = 512
     rnn_hidden_size = 1024
 
-    asr_model = build_lstm_transducer_model(sp)
+    if 'lstm' in args.pretrained_model:
+        asr_model = build_lstm_transducer_model(sp)
+    else:
+        params = get_default_params()
+        asr_model = build_conformer_transducer_model(sp, params)
+        logging.info('using the Conformer model.')
     # print(asr_model)
 
     asr_model.load_state_dict(

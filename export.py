@@ -75,9 +75,10 @@ def export_encoder_model_jit_trace(
     traced_model.save(encoder_filename)
     logging.info(f"Saved to {encoder_filename}")
 
-    o_f = str(encoder_filename).split('.')[0] + '.onnx'
+    o_f = str(encoder_filename).split(".")[0] + ".onnx"
     # torch.onnx.export(encoder_model, (x, x_lens, states), o_f)
     logging.info(f"Saved ONNX to {o_f}")
+
 
 def export_decoder_model_jit_trace(
     decoder_model: nn.Module,
@@ -128,7 +129,7 @@ def main():
     args = get_parser().parse_args()
     params = get_params()
     params.update(vars(args))
-    params.update({'exp_dir': "weights"})
+    params.update({"exp_dir": "weights"})
     params.exp_dir = Path(params.exp_dir)
 
     device = torch.device("cpu")
@@ -157,13 +158,13 @@ def main():
 
     model.to(device)
     model.load_state_dict(
-        torch.load(args.pretrained_model, 'cpu'),
+        torch.load(args.pretrained_model, "cpu"),
         strict=False,
     )
 
     model.to("cpu")
     model.eval()
-    logging.info('model loaded!')
+    logging.info("model loaded!")
 
     if params.pnnx:
         convert_scaled_to_non_scaled(model, inplace=True)
