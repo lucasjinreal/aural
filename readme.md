@@ -2,7 +2,15 @@
 
 ![](https://s1.ax1x.com/2022/09/23/xkR3CR.png)
 
-**Aural** is a project which focusing on training a ASR model. Then using the output model to driven more applications which need ASR.
+![](https://s1.ax1x.com/2022/09/25/xETStf.png)
+
+**Aural** is a **simple, elegant** ASR framework not like Kaldi style, it's more clean and pythonic, can be easily used and understandable, supports both English and Chinese. You can also train on it. Then using the output model to driven more applications which need ASR.
+
+We hoping for u join us, if you are interested in:
+
+- Keywords spotting task for Chinese;
+- ASR model inference on NCNN, WNN or ONNXRuntime.
+- An AI assistence which can understand your voice in **REALTIME** speed;
 
 For instance, we can using aural model to listen command, just by saying, let your AI can understand what you saying.
 
