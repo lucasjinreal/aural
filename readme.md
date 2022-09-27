@@ -138,6 +138,12 @@ https://github.com/jinfagang/ncnn/tree/merge_xx
 ```
 
 
+## C++ Deployment
+
+The exported model can also using C++ to inference. See this project:
+
+https://github.com/jinfagang/sherpa_ort.git
+
 ## References
 
 1. TTS: https://github.com/MiniXC/LightningFastSpeech2
