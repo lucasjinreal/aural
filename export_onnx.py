@@ -316,8 +316,8 @@ def export_joiner_model_onnx(
     """
     encoder_out_dim = joiner_model.encoder_proj.weight.shape[1]
     decoder_out_dim = joiner_model.decoder_proj.weight.shape[1]
-    encoder_out = torch.rand(1, encoder_out_dim, dtype=torch.float32)
-    decoder_out = torch.rand(1, decoder_out_dim, dtype=torch.float32)
+    encoder_out = torch.rand(1, 1, 1, encoder_out_dim, dtype=torch.float32)
+    decoder_out = torch.rand(1, 1, 1, decoder_out_dim, dtype=torch.float32)
 
     project_input = True
     # Note: It uses torch.jit.trace() internally
@@ -333,6 +333,32 @@ def export_joiner_model_onnx(
             "encoder_out": {0: "N"},
             "decoder_out": {0: "N"},
             "logit": {0: "N"},
+        },
+    )
+    torch.onnx.export(
+        joiner_model.encoder_proj,
+        (encoder_out.squeeze(0).squeeze(0)),
+        str(joiner_filename).replace(".onnx", "_encoder_proj.onnx"),
+        verbose=False,
+        opset_version=opset_version,
+        input_names=["encoder_out"],
+        output_names=["encoder_proj"],
+        dynamic_axes={
+            "encoder_out": {0: "N"},
+            "encoder_proj": {0: "N"},
+        },
+    )
+    torch.onnx.export(
+        joiner_model.decoder_proj,
+        (decoder_out.squeeze(0).squeeze(0)),
+        str(joiner_filename).replace(".onnx", "_decoder_proj.onnx"),
+        verbose=False,
+        opset_version=opset_version,
+        input_names=["decoder_out"],
+        output_names=["decoder_proj"],
+        dynamic_axes={
+            "decoder_out": {0: "N"},
+            "decoder_proj": {0: "N"},
         },
     )
     logging.info(f"Saved to {joiner_filename}")
@@ -366,7 +392,7 @@ def main():
     params.update({"exp_dir": "weights/onnx"})
     params.exp_dir = Path(params.exp_dir)
     params.update(vars(args))
-    
+
     os.makedirs(params.exp_dir, exist_ok=True)
 
     device = torch.device("cpu")
@@ -378,16 +404,16 @@ def main():
     if "bpe" in args.bpe_model:
         sp = spm.SentencePieceProcessor()
         sp.load(args.bpe_model)
-         # <blk> is defined in local/train_bpe_model.py
+        # <blk> is defined in local/train_bpe_model.py
         params.blank_id = sp.piece_to_id("<blk>")
         params.vocab_size = sp.get_piece_size()
     else:
         lexions = Lexicon(args.bpe_model)
         # vc  = max(token_table) + 1
-         # <blk> is defined in local/train_bpe_model.py
+        # <blk> is defined in local/train_bpe_model.py
         params.blank_id = lexions.token_table["<blk>"]
         params.vocab_size = max(lexions.tokens) + 1
-        logging.info('Reading Lexions...')
+        logging.info("Reading Lexions...")
 
         sp = lexions
 
