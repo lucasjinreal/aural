@@ -65,6 +65,11 @@ Download wenet pretrained model:
 git clone https://huggingface.co/csukuangfj/icefall-asr-wenetspeech-lstm-transducer-stateless-2022-09-19
 ```
 
+Using following to convert to onnx:
+
+```
+
+```
 
 ## Export JIT ONNX
 
