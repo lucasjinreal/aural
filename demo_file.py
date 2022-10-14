@@ -138,6 +138,7 @@ def main():
     logging.info("asr model loaded!")
 
     print_shape(features)
+    torch.save(features, 'testdata.pt')
 
     if "lstm" in args.pretrained_model:
         states = (

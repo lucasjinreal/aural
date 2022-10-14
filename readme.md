@@ -96,8 +96,15 @@ You will get output:
 Using following to convert to onnx:
 
 ```
+git clone https://huggingface.co/luomingshuang/icefall_asr_wenetspeech_pruned_transducer_stateless2
 
+python export_onnx.py --pretrained_model weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/exp_trained_with_M/pretrained_epoch_29_avg_11.pt --bpe_model weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/data/lang_char/
+
+python export_test.py -p weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/exp/pretrained_epoch_10_avg_2.pt -l weights/icefall_asr_wenetspeech_pruned_transducer_stateless2/data/lang_char/ --onnx true
 ```
+
+
+
 
 ## Export JIT ONNX
 

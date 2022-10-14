@@ -1,11 +1,17 @@
 import argparse
 import logging
 from pathlib import Path
-import os
-import onnx
-import sentencepiece as spm
+
 import torch
 import torch.nn as nn
+from aural.modeling.post.geedysearch import greedy_search_single_batch
+# from scaling_converter import convert_scaled_to_non_scaled
+# from train import get_params, get_transducer_model
+
+# from icefall.checkpoint import average_checkpoints, load_checkpoint
+# from icefall.lexicon import Lexicon
+# from icefall.utils import str2bool
+
 from aural.utils.lexicon import Lexicon
 from aural.utils.scaling_converter import convert_scaled_to_non_scaled
 
@@ -15,17 +21,12 @@ from aural.modeling.meta_arch.conformer_transducer import (
     add_model_arguments,
     get_default_params,
 )
+from aural.utils.util import str2bool
 from aural.utils.checkpoint import (
     average_checkpoints,
     find_checkpoints,
     load_checkpoint,
 )
-from aural.utils.util import str2bool
-from alfred import logger as logging
-
-"""
-the LSTM model can not convert to onnx, this only for conformer or emformer
-"""
 
 
 def get_parser():
@@ -33,13 +34,33 @@ def get_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    parser.add_argument("-p", "--pretrained_model", type=str, help="pretrained model")
     parser.add_argument(
-        "--bpe_model",
-        type=str,
-        default="data/lang_bpe_500/bpe.model",
-        help="Path to the BPE model",
+        "--epoch",
+        type=int,
+        default=28,
+        help="It specifies the checkpoint to use for decoding."
+        "Note: Epoch counts from 0.",
     )
+
+    parser.add_argument(
+        "--avg",
+        type=int,
+        default=15,
+        help="Number of checkpoints to average. Automatically select "
+        "consecutive checkpoints before the checkpoint specified by "
+        "'--epoch'. ",
+    )
+
+    parser.add_argument("-p", "--pretrained_model", type=str, help="pretrained model")
+
+    parser.add_argument(
+        '-l',
+        "--lang-dir",
+        type=str,
+        default="data/lang_char",
+        help="The lang dir",
+    )
+
     parser.add_argument(
         "--jit",
         type=str2bool,
@@ -50,9 +71,11 @@ def get_parser():
          - decoder_jit_script.pt
          - joiner_jit_script.pt
          - cpu_jit.pt (which combines the above 3 files)
-        Check ./jit_pretrained.py for how to use them.
+
+        Check ./jit_pretrained.py for how to use xxx_jit_script.pt
         """,
     )
+
     parser.add_argument(
         "--jit-trace",
         type=str2bool,
@@ -62,36 +85,35 @@ def get_parser():
          - encoder_jit_trace.pt
          - decoder_jit_trace.pt
          - joiner_jit_trace.pt
+
         Check ./jit_pretrained.py for how to use them.
         """,
     )
+
     parser.add_argument(
         "--onnx",
         type=str2bool,
-        default=True,
+        default=False,
         help="""If True, --jit is ignored and it exports the model
-        to onnx format. Three files will be generated:
+        to onnx format. It will generate the following files:
+
             - encoder.onnx
             - decoder.onnx
             - joiner.onnx
-        Check ./onnx_check.py and ./onnx_pretrained.py for how to use them.
+            - joiner_encoder_proj.onnx
+            - joiner_decoder_proj.onnx
+
+        Refer to ./onnx_check.py and ./onnx_pretrained.py for how to use them.
         """,
     )
+
     parser.add_argument(
         "--context-size",
         type=int,
         default=2,
         help="The context size in the decoder. 1 means bigram; " "2 means tri-gram",
     )
-    parser.add_argument(
-        "--streaming-model",
-        type=str2bool,
-        default=False,
-        help="""Whether to export a streaming model, if the models in exp-dir
-        are streaming model, this should be True.
-        """,
-    )
-    add_model_arguments(parser)
+
     return parser
 
 
@@ -100,6 +122,7 @@ def export_encoder_model_jit_script(
     encoder_filename: str,
 ) -> None:
     """Export the given encoder model with torch.jit.script()
+
     Args:
       encoder_model:
         The input encoder model
@@ -116,6 +139,7 @@ def export_decoder_model_jit_script(
     decoder_filename: str,
 ) -> None:
     """Export the given decoder model with torch.jit.script()
+
     Args:
       decoder_model:
         The input decoder model
@@ -132,6 +156,7 @@ def export_joiner_model_jit_script(
     joiner_filename: str,
 ) -> None:
     """Export the given joiner model with torch.jit.trace()
+
     Args:
       joiner_model:
         The input joiner model
@@ -148,7 +173,9 @@ def export_encoder_model_jit_trace(
     encoder_filename: str,
 ) -> None:
     """Export the given encoder model with torch.jit.trace()
+
     Note: The warmup argument is fixed to 1.
+
     Args:
       encoder_model:
         The input encoder model
@@ -168,7 +195,9 @@ def export_decoder_model_jit_trace(
     decoder_filename: str,
 ) -> None:
     """Export the given decoder model with torch.jit.trace()
+
     Note: The argument need_pad is fixed to False.
+
     Args:
       decoder_model:
         The input decoder model
@@ -188,14 +217,17 @@ def export_joiner_model_jit_trace(
     joiner_filename: str,
 ) -> None:
     """Export the given joiner model with torch.jit.trace()
+
     Note: The argument project_input is fixed to True. A user should not
     project the encoder_out/decoder_out by himself/herself. The exported joiner
     will do that for the user.
+
     Args:
       joiner_model:
         The input joiner model
       joiner_filename:
         The filename to save the exported model.
+
     """
     encoder_out_dim = joiner_model.encoder_proj.weight.shape[1]
     decoder_out_dim = joiner_model.decoder_proj.weight.shape[1]
@@ -214,12 +246,17 @@ def export_encoder_model_onnx(
 ) -> None:
     """Export the given encoder model to ONNX format.
     The exported model has two inputs:
+
         - x, a tensor of shape (N, T, C); dtype is torch.float32
         - x_lens, a tensor of shape (N,); dtype is torch.int64
+
     and it has two outputs:
+
         - encoder_out, a tensor of shape (N, T, C)
         - encoder_out_lens, a tensor of shape (N,)
+
     Note: The warmup argument is fixed to 1.
+
     Args:
       encoder_model:
         The input encoder model
@@ -266,11 +303,17 @@ def export_decoder_model_onnx(
     opset_version: int = 11,
 ) -> None:
     """Export the decoder model to ONNX format.
+
     The exported model has one input:
+
         - y: a torch.int64 tensor of shape (N, decoder_model.context_size)
+
     and has one output:
+
         - decoder_out: a torch.float32 tensor of shape (N, 1, C)
+
     Note: The argument need_pad is fixed to False.
+
     Args:
       decoder_model:
         The decoder model to be exported.
@@ -396,27 +439,6 @@ def export_joiner_model_onnx(
     logging.info(f"Saved to {decoder_proj_filename}")
 
 
-def export_all_in_one_onnx(
-    encoder_filename: str,
-    decoder_filename: str,
-    joiner_filename: str,
-    all_in_one_filename: str,
-):
-    encoder_onnx = onnx.load(encoder_filename)
-    decoder_onnx = onnx.load(decoder_filename)
-    joiner_onnx = onnx.load(joiner_filename)
-
-    encoder_onnx = onnx.compose.add_prefix(encoder_onnx, prefix="encoder/")
-    decoder_onnx = onnx.compose.add_prefix(decoder_onnx, prefix="decoder/")
-    joiner_onnx = onnx.compose.add_prefix(joiner_onnx, prefix="joiner/")
-
-    combined_model = onnx.compose.merge_models(encoder_onnx, decoder_onnx, io_map={})
-    combined_model = onnx.compose.merge_models(combined_model, joiner_onnx, io_map={})
-    onnx.save(combined_model, all_in_one_filename)
-    logging.info(f"Saved to {all_in_one_filename}")
-
-
-@torch.no_grad()
 def main():
     args = get_parser().parse_args()
 
@@ -425,46 +447,37 @@ def main():
     params.exp_dir = Path(params.exp_dir)
     params.update(vars(args))
 
-    os.makedirs(params.exp_dir, exist_ok=True)
-
     device = torch.device("cpu")
     if torch.cuda.is_available():
         device = torch.device("cuda", 0)
 
     logging.info(f"device: {device}")
 
-    if "bpe" in args.bpe_model:
-        sp = spm.SentencePieceProcessor()
-        sp.load(args.bpe_model)
-        # <blk> is defined in local/train_bpe_model.py
-        params.blank_id = sp.piece_to_id("<blk>")
-        params.vocab_size = sp.get_piece_size()
-    else:
-        lexions = Lexicon(args.bpe_model)
-        # vc  = max(token_table) + 1
-        # <blk> is defined in local/train_bpe_model.py
-        params.blank_id = lexions.token_table["<blk>"]
-        params.vocab_size = max(lexions.tokens) + 1
-        logging.info("Reading Lexions...")
+    lexicon = Lexicon(params.lang_dir)
 
-        sp = lexions
-
-    if params.streaming_model:
-        assert params.causal_convolution
+    params.blank_id = 0
+    params.vocab_size = max(lexicon.tokens) + 1
 
     logging.info(params)
 
     logging.info("About to create model")
-    # model = get_transducer_model(params, enable_giga=False)
-    model = build_conformer_transducer_model(sp, params)
+    # model = get_transducer_model(params)
+    model = build_conformer_transducer_model(lexicon, params)
     model.to(device)
 
     model.load_state_dict(
         torch.load(args.pretrained_model, map_location="cpu")["model"],
-        strict=False,
+        strict=True,
     )
     model.to("cpu")
     model.eval()
+
+    features = torch.load('testdata.pt')
+    encoder_out, encoder_out_lens = model.run_encoder(features)
+    tokens = greedy_search_single_batch(model, encoder_out, encoder_out_lens)
+    res = [lexicon.token_table[i] for i in tokens]
+    res = "".join(res) 
+    logging.info(res)
 
     if params.onnx is True:
         convert_scaled_to_non_scaled(model, inplace=True)
@@ -490,50 +503,11 @@ def main():
             joiner_filename,
             opset_version=opset_version,
         )
-
-        all_in_one_filename = params.exp_dir / "all_in_one.onnx"
-        export_all_in_one_onnx(
-            encoder_filename,
-            decoder_filename,
-            joiner_filename,
-            all_in_one_filename,
-        )
-    elif params.jit is True:
-        convert_scaled_to_non_scaled(model, inplace=True)
-        logging.info("Using torch.jit.script()")
-        # We won't use the forward() method of the model in C++, so just ignore
-        # it here.
-        # Otherwise, one of its arguments is a ragged tensor and is not
-        # torch scriptabe.
-        model.__class__.forward = torch.jit.ignore(model.__class__.forward)
-        logging.info("Using torch.jit.script")
-        model = torch.jit.script(model)
-        filename = params.exp_dir / "cpu_jit.pt"
-        model.save(str(filename))
-        logging.info(f"Saved to {filename}")
-
-        # Also export encoder/decoder/joiner separately
-        encoder_filename = params.exp_dir / "encoder_jit_script.pt"
-        export_encoder_model_jit_script(model.encoder, encoder_filename)
-
-        decoder_filename = params.exp_dir / "decoder_jit_script.pt"
-        export_decoder_model_jit_script(model.decoder, decoder_filename)
-
-        joiner_filename = params.exp_dir / "joiner_jit_script.pt"
-        export_joiner_model_jit_script(model.joiner, joiner_filename)
-
-    elif params.jit_trace is True:
-        convert_scaled_to_non_scaled(model, inplace=True)
-        logging.info("Using torch.jit.trace()")
-        encoder_filename = params.exp_dir / "encoder_jit_trace.pt"
-        export_encoder_model_jit_trace(model.encoder, encoder_filename)
-
-        decoder_filename = params.exp_dir / "decoder_jit_trace.pt"
-        export_decoder_model_jit_trace(model.decoder, decoder_filename)
-
-        joiner_filename = params.exp_dir / "joiner_jit_trace.pt"
-        export_joiner_model_jit_trace(model.joiner, joiner_filename)
+    else:
+        print('else not supported.')
 
 
 if __name__ == "__main__":
+    formatter = "%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s"
+    logging.basicConfig(format=formatter, level=logging.INFO)
     main()
