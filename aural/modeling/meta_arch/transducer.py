@@ -5,6 +5,8 @@ import k2
 import torch
 import torch.nn as nn
 
+from aural.modeling.encoders.conformer import Conformer
+
 from ..encoders.base_encoder import EncoderInterface
 from aural.utils.scaling import ScaledLinear
 
@@ -58,17 +60,21 @@ class Transducer(nn.Module):
         self.simple_am_proj = ScaledLinear(encoder_dim, vocab_size, initial_speed=0.5)
         self.simple_lm_proj = ScaledLinear(decoder_dim, vocab_size)
 
-    def run_encoder(self, features, states):
+    def run_encoder(self, features, states=None):
         x_lens = torch.tensor([features.size(1)], dtype=torch.long)
-        print('xlens: ', x_lens)
-        encoder_out, lengths, new_states = self.encoder(features, x_lens, states)
-        return encoder_out, lengths, *new_states
+        # print('xlens: ', x_lens)
+        if isinstance(self.encoder, Conformer):
+            encoder_out, lengths = self.encoder(features, x_lens)
+            return encoder_out, lengths
+        else:
+            encoder_out, lengths, new_states = self.encoder(features, x_lens, states)
+            return encoder_out, lengths, *new_states
 
     def run_decoder(self, x):
         if self.training:
-          out = self.decoder(x, need_pad=True)
+            out = self.decoder(x, need_pad=True)
         else:
-          out = self.decoder(x, need_pad=False)
+            out = self.decoder(x, need_pad=False)
         return out
 
     def run_joiner(self, encoder_out, decoder_out):
@@ -204,7 +210,5 @@ class Transducer(nn.Module):
             return (simple_loss, pruned_loss)
         else:
             outs = self.joiner(am, lm, project_input=False)
-            print_shape(outs)
+            # print_shape(outs)
             return outs
-
-

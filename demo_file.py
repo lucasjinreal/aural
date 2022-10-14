@@ -8,6 +8,7 @@ from aural.modeling.post.beamsearch import (
     GreedySearch,
     ModifiedBeamSearch,
 )
+import k2
 from alfred import logger as logging
 import argparse
 from typing import List
@@ -20,14 +21,21 @@ from alfred import print_shape
 from aural.modeling.post.geedysearch import (
     greedy_search_batch,
     greedy_search_single_batch,
+    GreedySearchOffline,
 )
+from aural.modeling.meta_arch.conformer_transducer import (
+    build_conformer_transducer_model,
+    get_default_params,
+)
+from aural.utils.lexicon import Lexicon
+
 
 torch.set_grad_enabled(False)
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bpe_model", type=str, help="Path to bpe.model")
+    parser.add_argument("-b", "--bpe_model", type=str, help="Path to bpe.model")
     parser.add_argument("-p", "--pretrained_model", type=str, help="pretrained model")
     parser.add_argument(
         "-f",
@@ -81,8 +89,13 @@ def main():
     args = get_args()
     logging.info(vars(args))
 
-    sp = spm.SentencePieceProcessor()
-    sp.load(args.bpe_model)
+    if "bpe" in args.bpe_model:
+        sp = spm.SentencePieceProcessor()
+        sp.load(args.bpe_model)
+    else:
+        lexions = Lexicon(args.bpe_model)
+        # vc  = max(token_table) + 1
+        print(len(lexions.tokens))
 
     sound_file = args.file
     sample_rate = 16000
@@ -107,12 +120,16 @@ def main():
     features = fbank(wave_samples)
     features = features.unsqueeze(0)
 
-    num_encoder_layers = 12
-    d_model = 512
-    rnn_hidden_size = 1024
-
-    asr_model = build_lstm_transducer_model(sp)
-    # print(asr_model)
+    if "lstm" in args.pretrained_model:
+        logging.info("using lstm model.")
+        rnn_hidden_size = 1024
+        num_encoder_layers = 12
+        d_model = 512
+        asr_model = build_lstm_transducer_model(sp)
+    else:
+        logging.info("using the Conformer model.")
+        params = get_default_params()
+        asr_model = build_conformer_transducer_model(lexions, params)
 
     asr_model.load_state_dict(
         torch.load(args.pretrained_model, map_location="cpu")["model"]
@@ -120,21 +137,42 @@ def main():
     asr_model.eval()
     logging.info("asr model loaded!")
 
-    states = (
-        torch.zeros(num_encoder_layers, features.size(0), d_model),
-        torch.zeros(
-            num_encoder_layers,
-            features.size(0),
-            rnn_hidden_size,
-        ),
-    )
-
     print_shape(features)
-    encoder_out, encoder_out_lens, hx, cx = asr_model.run_encoder(features, states)
-    # hyp = greedy_search(asr_model, encoder_out)
-    hyp = greedy_search_single_batch(asr_model, encoder_out, encoder_out_lens)
-    logging.info(sound_file)
-    logging.info(sp.decode(hyp))
+
+    if "lstm" in args.pretrained_model:
+        states = (
+            torch.zeros(num_encoder_layers, features.size(0), d_model),
+            torch.zeros(
+                num_encoder_layers,
+                features.size(0),
+                rnn_hidden_size,
+            ),
+        )
+        encoder_out, encoder_out_lens, hx, cx = asr_model.run_encoder(features, states)
+        # hyp = greedy_search(asr_model, encoder_out)
+        hyp = greedy_search_single_batch(asr_model, encoder_out, encoder_out_lens)
+        logging.info(sound_file)
+
+        if "bpe" in args.bpe_model:
+            res = sp.decode(hyp)
+        else:
+            print(lexions.token_table)
+            print(hyp)
+            res = [lexions.token_table[i] for i in hyp]
+            res = ["".join(r) for r in res]
+        logging.info(res)
+    else:
+        logging.info("runing on conformer..")
+        encoder_out, encoder_out_lens = asr_model.run_encoder(features)
+        tokens = greedy_search_single_batch(asr_model, encoder_out, encoder_out_lens)
+        logging.info(sound_file)
+
+        if "bpe" in args.bpe_model:
+            res = sp.decode(tokens)
+        else:
+            res = [lexions.token_table[i] for i in tokens]
+            res = "".join(res) 
+        logging.info(res)
 
 
 if __name__ == "__main__":
